@@ -19,9 +19,11 @@ os.environ['HF_HUB_OFFLINE'] = '1'
 processor = WhisperProcessor.from_pretrained(
     "./models/whisper-large-v3-turbo"
 )
+
 triton_model = WhisperForConditionalGeneration.from_pretrained(
     "./models/whisper-large-v3-turbo"
 )
+
 triton_model.generation_config.forced_decoder_ids = None
 triton_model.generation_config.suppress_tokens = None
 triton_model.generation_config.begin_suppress_tokens = None
@@ -101,3 +103,17 @@ print(hidden_state)
 #     predicted_ids = triton_model.generate(tokenized_input)
 
 # print(predicted_ids)
+
+
+
+# import matplotlib.pyplot as plt
+
+# data = x[-1].detach().numpy()
+# plt.figure(figsize=(12, 6))
+# plt.imshow(data, aspect='auto', cmap='viridis')
+# plt.colorbar(label='Intensity')
+# plt.xlabel('Feature Dimension')
+# plt.ylabel('Time Steps')
+# plt.title('Audio Feature Heatmap')
+# plt.tight_layout()
+# plt.show()

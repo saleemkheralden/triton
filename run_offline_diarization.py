@@ -77,6 +77,28 @@ def write_txt_output(diarization, output_txt: Path) -> None:
 			f.write(f"{segment.start:.3f}\t{segment.end:.3f}\t{speaker}\n")
 
 
+def get_annotation_from_output(diarization_output):
+	"""Return pyannote.core.Annotation from pipeline output across API versions."""
+	if hasattr(diarization_output, "write_rttm") and hasattr(diarization_output, "itertracks"):
+		return diarization_output
+
+	for attr in ("speaker_diarization", "exclusive_speaker_diarization", "annotation", "diarization"):
+		candidate = getattr(diarization_output, attr, None)
+		if candidate is not None and hasattr(candidate, "write_rttm") and hasattr(candidate, "itertracks"):
+			return candidate
+
+	if isinstance(diarization_output, dict):
+		for key in ("speaker_diarization", "exclusive_speaker_diarization", "annotation", "diarization"):
+			candidate = diarization_output.get(key)
+			if candidate is not None and hasattr(candidate, "write_rttm") and hasattr(candidate, "itertracks"):
+				return candidate
+
+	raise TypeError(
+		"Unsupported diarization output type. "
+		f"Got {type(diarization_output).__name__}; expected an Annotation-like object."
+	)
+
+
 def main() -> None:
 	args = parse_args()
 
@@ -97,20 +119,21 @@ def main() -> None:
 		if args.max_speakers is not None:
 			diarization_kwargs["max_speakers"] = args.max_speakers
 
-	diarization = pipeline(str(args.audio), **diarization_kwargs)
+	diarization_output = pipeline(str(args.audio), **diarization_kwargs)
+	diarization = get_annotation_from_output(diarization_output)
 
-	print(diarization)
+	# print(diarization)
 
-	# args.output.parent.mkdir(parents=True, exist_ok=True)
-	# with args.output.open("w", encoding="utf-8") as f:
-	# 	diarization.write_rttm(f)
+	args.output.parent.mkdir(parents=True, exist_ok=True)
+	with args.output.open("w", encoding="utf-8") as f:
+		diarization.write_rttm(f)
 
-	# if args.output_txt:
-	# 	write_txt_output(diarization, args.output_txt)
+	if args.output_txt:
+		write_txt_output(diarization, args.output_txt)
 
-	# print(f"Diarization complete. RTTM saved to: {args.output}")
-	# if args.output_txt:
-	# 	print(f"Segment list saved to: {args.output_txt}")
+	print(f"Diarization complete. RTTM saved to: {args.output}")
+	if args.output_txt:
+		print(f"Segment list saved to: {args.output_txt}")
 
 
 if __name__ == "__main__":

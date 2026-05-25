@@ -105,10 +105,10 @@ print(y)
 print(y.shape)
 
 
-# model_classes = None
-# if getattr(model, "specifications", None) is not None and getattr(model.specifications, "classes", None):
-#     model_classes = list(model.specifications.classes)
-# print(model_classes)
+model_classes = None
+if getattr(model, "specifications", None) is not None and getattr(model.specifications, "classes", None):
+    model_classes = list(model.specifications.classes)
+print(model_classes)
 
 visualize_segmentation(
 	audio,
