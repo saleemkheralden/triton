@@ -1,6 +1,6 @@
 import os
 import wave
-from preprocessing import normalize_audio, whisper_tokinze
+from preprocessing import normalize_audio, whisper_tokinze, build_input
 
 import numpy as np
 
@@ -24,8 +24,13 @@ def read_audio(audio_path: str):
     return { 'data': wav_data, 'sr': sample_rate, 'ch': channels }
 
 batch = list(map(read_audio, TEST_AUDIO_PATH))
-normalized_audio = normalize_audio(list([ e['data'] for e in batch]))
-x, attention_mask = whisper_tokinze(normalized_audio)
+# normalized_audio = normalize_audio(list([ e['data'] for e in batch ]))
+# x, attention_mask = whisper_tokinze(normalized_audio)
+
+x, attention_mask = build_input(list([ e['data'] for e in batch ]))
+
+print(x.shape)
+exit(0)
 
 from transformers import WhisperForConditionalGeneration, WhisperProcessor
 

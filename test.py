@@ -93,6 +93,7 @@ hidden_state = triton_model.generate(
     language="he",
     task="transcribe"
 )
+
 print(hidden_state)
 # print(f"hidden state shape: {hidden_state.shape}")
 # output = processor.batch_decode(hidden_state, skip_special_tokens=True)  #[0].strip()
@@ -103,6 +104,13 @@ print(hidden_state)
 #     predicted_ids = triton_model.generate(tokenized_input)
 
 # print(predicted_ids)
+
+
+
+
+
+
+
 
 
 
