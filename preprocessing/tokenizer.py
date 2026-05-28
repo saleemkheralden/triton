@@ -6,16 +6,19 @@ import os
 
 def whisper_tokinze(
 	audio: list[bytes],
-	sample_rate: int = 16000,
-	model_path: str = "./models/whisper-large-v3-turbo"
-):
-	processor = WhisperProcessor.from_pretrained(
-		model_path
-	)
-	
+	processor: WhisperProcessor,
+	sample_rate: int = 16000
+):	
 	# Now `audio` is a 1D or 2D numpy array of float32 samples in the range [-1.0, 1.0).
 	# Next step is to convert this "raw" audio array into tokenized vector that the model can understand.
-	inputs = processor(audio, sampling_rate=sample_rate, return_tensors="pt", return_attention_mask=True)
+	inputs = processor(
+		audio, 
+		sampling_rate=sample_rate, 
+		return_tensors="pt", 
+		return_attention_mask=True,
+		# truncation=False,  # default value is True, this truncates the audio into 30s window (adds padding if shorter than 30s)
+		padding="longest"
+	)
 	input_features, attention_mask = inputs.input_features, inputs.get("attention_mask")
 	
 	return input_features, attention_mask

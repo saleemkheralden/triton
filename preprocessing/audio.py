@@ -10,7 +10,7 @@ def normalize_audio(
 	audio_bytes: list[bytes] | bytes,
 	channels: int = 1,
 	sample_width: int = 2
-) -> list[np.array] | np.array:
+) -> list[np.ndarray] | np.ndarray:
 	list_flag = True
 	if not isinstance(audio_bytes, list):
 		list_flag = False
