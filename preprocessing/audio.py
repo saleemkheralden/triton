@@ -1,4 +1,8 @@
 import numpy as np
+import webrtcvad
+
+VAD_MS = [10, 20, 30]
+TEN_MS = 10 / 1000
 
 dtype_mapping = {
 	1: np.int8,
@@ -48,3 +52,43 @@ def normalize_audio(
 		return ret[0]
 		
 	return ret
+
+def calc_bytes_per_ms(
+	sample_rate: int,
+	sample_width: int,
+	channels: int,
+	ms: float = TEN_MS
+) -> float:
+	r"""
+	According to the forumal of duration (in seconds) as a function of the audio bytes.
+	sample rate, sample width and channels we get
+	
+	.. math:: duration = \frac{bytes}{sr \cdot sw \cdot ch}
+
+	s.t. 
+		sr - sample rate
+		sw - sample width
+		ch - channels
+	"""
+
+	return ms * sample_rate * sample_width * channels
+
+
+
+def vad_collector(
+	chunk: bytes, 
+	bytes_per_ten_ms: int, 
+	vad: webrtcvad.Vad, 
+	sample_rate: int = 16000
+):
+	frame_samples = int(TEN_MS * sample_rate)
+	ret = []
+
+	for frame_idx in range(0, len(chunk), bytes_per_ten_ms):
+		frame = chunk[frame_idx:min(frame_idx + bytes_per_ten_ms, len(chunk))]
+		frame = frame + b'\x00' * (bytes_per_ten_ms - len(frame))
+
+		# each approval is for 10ms frame, i.e., sample_rate x 10ms samples.
+		frame_approval = vad.is_speech(frame, 16000)
+		ret.extend([frame_approval] * frame_samples)
+	return np.array(ret, dtype=np.float32)

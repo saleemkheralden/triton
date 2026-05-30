@@ -1,6 +1,7 @@
 from transformers import WhisperProcessor
 from .audio import normalize_audio
 from .tokenizer import whisper_tokinze, build_triton_input
+import numpy as np
 
 def build_input(
 	audio_bytes: list[bytes] | bytes,
@@ -10,13 +11,18 @@ def build_input(
 	sample_rate: int = 16000,
 	input_layer_name: str = "mel",
 	input_data_type: str = "FP32",
-	triton_input: bool = True
+	triton_input: bool = True,
+	vad_mask: np.ndarray = None
 ):
 	norm_audio = normalize_audio(
 		audio_bytes=audio_bytes, 
 		channels=channels, 
 		sample_width=sample_width
 	)
+
+	if vad_mask is not None:
+		norm_audio = norm_audio[np.array(vad_mask, dtype=bool)]
+	
 
 	input_features, attention_mask = whisper_tokinze(
 		audio=norm_audio,
