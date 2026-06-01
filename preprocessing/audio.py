@@ -76,7 +76,7 @@ def calc_bytes_per_ms(
 
 
 def vad_collector(
-	chunk: bytes, 
+	chunk: bytes,
 	bytes_per_ten_ms: int, 
 	vad: webrtcvad.Vad, 
 	sample_rate: int = 16000

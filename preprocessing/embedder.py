@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import os
 
-def whisper_tokinze(
+def whisper_embed(
 	audio: list[bytes],
 	processor: WhisperProcessor,
 	sample_rate: int = 16000

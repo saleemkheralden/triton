@@ -1,6 +1,6 @@
 from transformers import WhisperProcessor
 from .audio import normalize_audio
-from .tokenizer import whisper_tokinze, build_triton_input
+from .embedder import whisper_embed, build_triton_input
 import numpy as np
 
 def build_input(
@@ -24,7 +24,7 @@ def build_input(
 		norm_audio = norm_audio[np.array(vad_mask, dtype=bool)]
 	
 
-	input_features, attention_mask = whisper_tokinze(
+	input_features, attention_mask = whisper_embed(
 		audio=norm_audio,
 		processor=processor,
 		sample_rate=sample_rate
