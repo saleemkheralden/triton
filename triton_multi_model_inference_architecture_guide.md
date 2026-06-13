@@ -1,6 +1,7 @@
 # Triton Multi-Model Inference Architecture Guide
 
 ## Overview
+
 This document explains how to design, deploy, and manage machine learning systems using NVIDIA Triton Inference Server with multiple model types including STT (Speech-to-Text), LLMs, diarization models, and future architectures.
 
 It focuses on practical deployment patterns, configuration discovery, and system design principles for production use.
@@ -12,6 +13,7 @@ It focuses on practical deployment patterns, configuration discovery, and system
 Triton Inference Server is NOT a pipeline engine.
 
 It is a model execution server that:
+
 - Loads models from a repository
 - Serves inference requests
 - Supports multiple backends
@@ -35,6 +37,7 @@ model_repository/
 ## Examples
 
 ### ONNX model
+
 ```
 stt_model/
   1/
@@ -43,6 +46,7 @@ stt_model/
 ```
 
 ### TensorRT model
+
 ```
 llm_model/
   1/
@@ -51,6 +55,7 @@ llm_model/
 ```
 
 ### Python backend
+
 ```
 alignment_model/
   1/
@@ -62,13 +67,13 @@ alignment_model/
 
 # 3. Supported Model Types
 
-| Type | Backend | File |
-|------|--------|------|
-| ONNX | onnxruntime | .onnx |
-| TensorRT | tensorrt_plan | .plan |
-| LLM optimized | TensorRT-LLM | engine directory |
-| Python logic | python backend | model.py |
-| Ensemble | ensemble | no model file |
+| Type          | Backend        | File             |
+| ------------- | -------------- | ---------------- |
+| ONNX          | onnxruntime    | .onnx            |
+| TensorRT      | tensorrt_plan  | .plan            |
+| LLM optimized | TensorRT-LLM   | engine directory |
+| Python logic  | python backend | model.py         |
+| Ensemble      | ensemble       | no model file    |
 
 ---
 
@@ -79,21 +84,25 @@ Triton determines model behavior using `config.pbtxt`.
 ## Examples
 
 ### ONNX
+
 ```
 platform: "onnxruntime_onnx"
 ```
 
 ### TensorRT
+
 ```
 platform: "tensorrt_plan"
 ```
 
 ### Python backend
+
 ```
 backend: "python"
 ```
 
 ### Ensemble
+
 ```
 platform: "ensemble"
 ```
@@ -107,6 +116,7 @@ Mismatch causes errors such as:
 > configuration expects 1 input, model provides 59
 
 This happens when:
+
 - Manually defined inputs are incorrect
 - Model was exported with many internal tensors
 
@@ -117,6 +127,7 @@ This happens when:
 ## Step 1: Inspect Model Inputs
 
 ### ONNX
+
 ```python
 import onnx
 
@@ -126,9 +137,10 @@ for inp in model.graph.input:
     print(inp.name)
 ```
 
-
 ## Step 2: Identify Input/Output Names
+
 Extract:
+
 - input names
 - output names
 - shapes
@@ -150,6 +162,7 @@ Let Triton auto-complete config when possible.
 ## Step 4: Only Manually Define When Necessary
 
 Manual definition is required for:
+
 - ensembles
 - batching control
 - strict validation
@@ -159,16 +172,20 @@ Manual definition is required for:
 # 7. STT Models (Speech-to-Text)
 
 ## Input
+
 - Audio waveform (float32, 16kHz)
 
 ## Output
+
 - Tokens or transcript text
 
 ## Common models
+
 - Whisper
 - wav2vec2
 
 ## Recommendation
+
 Use ONNX or TensorRT depending on performance needs.
 
 ---
@@ -178,18 +195,24 @@ Use ONNX or TensorRT depending on performance needs.
 ## Correct options
 
 ### Option 1 (Recommended)
+
 TensorRT-LLM
+
 - Best performance
 - Handles KV cache
 - Built for generation
 
 ### Option 2
+
 vLLM
+
 - Easier deployment
 - Good throughput
 
 ### Option 3 (Not recommended)
+
 ONNX Runtime
+
 - Hard to serve
 - Many inputs (KV cache explosion)
 - Manual generation required
@@ -199,11 +222,13 @@ ONNX Runtime
 # 9. Why ONNX LLM Export Breaks
 
 LLMs often expose:
+
 - input_ids
 - attention_mask
 - past_key_values (many tensors)
 
 Result:
+
 - dozens of inputs
 - complex config
 - difficult inference serving
@@ -213,10 +238,12 @@ Result:
 # 10. Ensembles
 
 Ensembles are used for:
+
 - simple model chaining
 - tensor routing
 
 NOT for:
+
 - alignment logic
 - business logic
 - LLM pipelines
@@ -243,24 +270,26 @@ LLM summarization (Triton / TensorRT-LLM)
 
 # 12. Where Logic Should Live
 
-| Component | Location |
-|----------|----------|
-| Model inference | Triton |
-| Alignment | Python service |
-| Pipeline orchestration | Python layer |
-| Model chaining (simple) | Ensemble |
+| Component               | Location       |
+| ----------------------- | -------------- |
+| Model inference         | Triton         |
+| Alignment               | Python service |
+| Pipeline orchestration  | Python layer   |
+| Model chaining (simple) | Ensemble       |
 
 ---
 
 # 13. Adding New Models (Future-Proofing)
 
 ## Step 1: Identify model type
+
 - STT
 - LLM
 - vision
 - embedding
 
 ## Step 2: Select backend
+
 - ONNX
 - TensorRT
 - Python
@@ -283,10 +312,12 @@ Never write `config.pbtxt` before inspecting model inputs and outputs.
 # 15. Summary
 
 Triton is:
+
 - a high-performance inference server
 - not a workflow engine
 
 Your system must:
+
 - handle logic externally
 - use Triton for execution only
 - choose backend per model type
@@ -295,11 +326,127 @@ Your system must:
 
 # 16. Final Recommendation Stack
 
-| Task | Best Choice |
-|------|------------|
-| STT | ONNX / TensorRT |
-| Diarization | ONNX |
-| LLM Summarization | TensorRT-LLM |
-| Alignment | Python service |
-| Simple pipelines | Ensemble |
+| Task              | Best Choice     |
+| ----------------- | --------------- |
+| STT               | ONNX / TensorRT |
+| Diarization       | ONNX            |
+| LLM Summarization | TensorRT-LLM    |
+| Alignment         | Python service  |
+| Simple pipelines  | Ensemble        |
 
+# Triton
+
+## Docker
+
+```bash
+docker run --rm -p8000:8000 -p8001:8001 -p8002:8002 -v $(pwd)/models:/models nvcr.io/nvidia/tritonserver:24.01-py3 tritonserver --model-repository=/models
+```
+
+This would run a docker container with the three ports `8000-8082` open which are
+
+```markdown
+HTTPService at 8000
+GRPCInferenceService at 8001
+Metrics Service at 8002
+```
+
+## Model repository
+
+For documentation: [see here](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/user_guide/model_repository.html)
+
+## Model "compilation" (Onnx)
+
+For documentation: [see here](https://docs.nvidia.com/deeplearning/tensorrt/latest/getting-started/quick-start-guide.html)
+
+If the model needs to be converted to a format that triton suuports, i.e. `.onnx`
+
+Before starting you need to install `transformers` and `optimum` packages.
+
+I used: `pip install transformers "optimum[onnxruntime]"`
+
+After downloading the model from huggingface, you should run
+
+```bash
+optimum-cli export onnx --model <hf_name_or_path_to_model> <name_of_compiled_modle> --task <choose_from_optimum-cli_list>
+```
+
+list of tasks:
+
+```
+- audio-classification
+- audio-frame-classification
+- audio-xvector
+- automatic-speech-recognition
+- depth-estimation
+- document-question-answering
+- feature-extraction
+- fill-mask
+- image-classification
+- image-segmentation
+- image-text-to-text
+- image-to-image
+- image-to-text
+- inpainting
+- keypoint-detection
+- mask-generation
+- masked-im
+- multiple-choice
+- object-detection
+- question-answering
+- reinforcement-learning
+- semantic-segmentation
+- sentence-similarity
+- text-classification
+- text-generation
+- text-to-audio
+- text-to-image
+- text2text-generation
+- time-series-forecasting
+- token-classification
+- visual-question-answering
+- ero-shot-image-classification
+- zero-shot-object-detection
+```
+
+Note that at this point you can deploy the model to triton, but it's not recommended since the model isn't optimized for production usecase.
+
+## Deploy model to production
+
+At this point you should have a `.onnx` model compiled.
+
+In this section the model would be converted into `.engine/.plan`.
+
+the python package will be used here, most common is the cli method.
+
+# Huggingface
+
+## download model
+
+run the command `hf download <model-tag> --local-dir <dir-path>`
+
+# Deploying model flow
+
+1. download model:
+
+```
+hf download ivrit-ai/whisper-large-v3-turbo --local-dir models\whisper-large-v3-turbo
+```
+
+2. convert to onnx:
+
+```
+optimum-cli export onnx --model models\whisper-large-v3-turbo triton_models\whisper --task automatic-speech-recognition
+```
+
+3. convert to tensorrt:
+
+```
+trtexec --onnx=triton_models\whisper\encoder_model.onnx --saveEngine=triton_models\whisper_trt\encoder.plan --minShapes=input_features:1x128x3000 --optShapes=input_features:1x128x3000 --maxShapes=input_features:8x128x3000 --fp16
+```
+
+Final changes
+triton inference server container verion = 26.04
+
+| Container Version | Triton Inference Server | Ubuntu | CUDA Toolkit       | TensorRT             |
+| ----------------- | ----------------------- | ------ | ------------------ | -------------------- |
+| 26.04             | 2.68.0                  | 24.04  | NVIDIA CUDA 13.2.1 | TensorRT™ 10.16.1.11 |

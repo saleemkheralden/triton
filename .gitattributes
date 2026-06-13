@@ -1,3 +1,4 @@
 models/** filter=lfs diff=lfs merge=lfs -text
 triton_models/** filter=lfs diff=lfs merge=lfs -text
 saved_audio/** filter=lfs diff=lfs merge=lfs -text
+main.ipynb filter=lfs diff=lfs merge=lfs -text

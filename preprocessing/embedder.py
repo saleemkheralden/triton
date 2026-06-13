@@ -16,8 +16,8 @@ def whisper_embed(
 		sampling_rate=sample_rate, 
 		return_tensors="pt", 
 		return_attention_mask=True,
-		# truncation=False,  # default value is True, this truncates the audio into 30s window (adds padding if shorter than 30s)
-		padding="longest"
+		truncation=False,  # default value is True, this truncates the audio into 30s window (adds padding if shorter than 30s)
+		# padding="longest"
 	)
 	input_features, attention_mask = inputs.input_features, inputs.get("attention_mask")
 	
