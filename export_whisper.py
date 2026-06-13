@@ -1,25 +1,25 @@
 import torch
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
+from pyannote.audio import Model
 
-model_id = "models/whisper-large-v3-turbo"
-
-processor = WhisperProcessor.from_pretrained(model_id)
-model = WhisperForConditionalGeneration.from_pretrained(model_id)
-
+# 1. Load your local pyannote model weights
+model = Model.from_pretrained("raw_models/pyannote-segmentation")
 model.eval()
 
-dummy_input = torch.randn(1, 128, 3000)  # mel spectrogram shape
+# 2. Create dummy input (Batch=1, Channels=1, Samples=160000 -> 10 seconds of 16kHz audio)
+dummy_input = torch.zeros(1, 1, 160000)
 
+# 3. Export directly to your Triton target directory
 torch.onnx.export(
-    model.model.encoder,
-    (dummy_input,),
-    "whisper_dynamic_encoder.onnx",
-    input_names=["mel_input"],
-    output_names=["encoder_hidden_features"],
+    model, 
+    dummy_input, 
+    "triton_models/pyannote-segmentation/1/model.onnx",
+    do_constant_folding=True,
+    input_names=["input_values"],
+    output_names=["logits"],
     dynamic_axes={
-        "mel_input": {2: "time"}
+        "input_values": {0: "batch_size", 2: "num_samples"},
+        "logits": {0: "batch_size", 1: "num_frames"}
     },
-    opset_version=17
+    # opset_version=14
 )
-
-print("Encoder exported")
+print("ONNX export complete!")

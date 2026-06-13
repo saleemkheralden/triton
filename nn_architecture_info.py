@@ -1,10 +1,18 @@
-import onnx
+import torch
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
-model = onnx.load("models/onnx_whisper/1/model.onnx")
+model_id = "raw_models/whisper-large-v3-turbo"
 
+processor = WhisperProcessor.from_pretrained(model_id)
+model = WhisperForConditionalGeneration.from_pretrained(model_id)
 
-for inp in model.graph.input:
-	print(inp.name)
-
-for inp in model.graph.output:
-	print(inp.name)
+print(f"Model: {model_id}")
+print(f"Config: {model.config}")
+print("\n=== Architecture ===")
+print(model)
+print(f"\n=== Total Parameters ===")
+total_params = sum(p.numel() for p in model.parameters())
+trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Total: {total_params:,}")
+print(f"Trainable: {trainable_params:,}")
+print(f"Frozen: {total_params - trainable_params:,}")

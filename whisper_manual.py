@@ -2,25 +2,27 @@ import os
 import tritonclient.grpc.aio as triton_grpc_aio
 from tritonclient.grpc import InferInput, InferRequestedOutput
 import numpy as np
+from collections.abc import Sequence
 
 import torch
 from transformers.modeling_outputs import BaseModelOutput
 
 from transformers import WhisperProcessor
 import warnings
+import asyncio
 warnings.filterwarnings("ignore")
 
 os.environ['HF_HUB_OFFLINE'] = '1'
 
 # load model and processor
 processor = WhisperProcessor.from_pretrained(
-    "./models/whisper-large-v3-turbo"
+    "./raw_models/whisper-large-v3-turbo"
 )
 
 # The value of INPUT_LAYER_NAME, OUTPUT_LAYER_NAME was taken from the `nn_architecture_info.py` output.
 # To know what's the output layer name run the code in `nn_architecture_info.py`
-OUTPUT_LAYER_NAME = "encoder_hidden_state"
-INPUT_LAYER_NAME = "mel"
+OUTPUT_LAYER_NAME = "last_hidden_state"
+INPUT_LAYER_NAME = "input_features"
 
 INPUT_DATA_TYPE = "FP32"
 TRITON_MODEL_NAME = "whisper"
@@ -46,7 +48,7 @@ def stream_audio_chunks(wav_data, chunk_size=4096):
         yield wav_data[i:i+chunk_size]
 
 def tokenize_audio(
-    pcm_bytes: bytes,
+    pcm_bytes: bytes | Sequence[bytes],
     sample_rate: int,
     channels: int,
     input_layer_name: str = "mel",
@@ -59,28 +61,44 @@ def tokenize_audio(
     # 16-bit PCM is calculated using sample_width x 8 (8 bits per byte)
     audio_type = np.int16
 
-    # audio is a 1D array of 16-bit signed integers.
-    audio = np.frombuffer(pcm_bytes, dtype=audio_type)
+    if isinstance(pcm_bytes, bytes):
+        audio_batch = [pcm_bytes]
+    else:
+        audio_batch = list(pcm_bytes)
+        if not audio_batch:
+            raise ValueError("pcm_bytes batch must not be empty")
 
-    # to normalize to [-1.0, 1.0) range, divide by the max absolute value of the min and max of the dtype. For int16, the range is -32768 to 32767, so we divide by 32768.
-    # For 16-bit signed integers, the max value is (2 ^ (16 - 1)) - 1 = 32767, and the min value is -(2 ^ (16 - 1)) = -32768. To normalize, we divide by 32768, which is the absolute value of the min.
-    audio = audio.astype(np.float32) / 32768.0
+    audio = []
+    for pcm in audio_batch:
+        # audio is a 1D array of 16-bit signed integers.
+        samples = np.frombuffer(pcm, dtype=audio_type)
 
-    # If the audio has multiple channels, reshape and average to mono
-    if channels > 1:
-        audio = audio.reshape(-1, channels).mean(axis=1)
+        # to normalize to [-1.0, 1.0) range, divide by the max absolute value of the min and max of the dtype. For int16, the range is -32768 to 32767, so we divide by 32768.
+        # For 16-bit signed integers, the max value is (2 ^ (16 - 1)) - 1 = 32767, and the min value is -(2 ^ (16 - 1)) = -32768. To normalize, we divide by 32768, which is the absolute value of the min.
+        samples = samples.astype(np.float32) / 32768.0
+
+        # If the audio has multiple channels, reshape and average to mono
+        if channels > 1:
+            samples = samples.reshape(-1, channels).mean(axis=1)
+
+        audio.append(samples)
 
     # Now `audio` is a 1D numpy array of float32 samples in the range [-1.0, 1.0).
     # Next step is to convert this "raw" audio array into tokenized vector that the model can understand.
-    input_features = processor(audio, sampling_rate=sample_rate, return_tensors="pt").input_features
+    input_features = processor(
+        audio,
+        sampling_rate=sample_rate,
+        return_tensors="np",
+        padding=True
+    ).input_features
 
-    input_features = input_features.astype(np.float32)
+    input_features = np.asarray(input_features, dtype=np.float32)
     infer_input = InferInput(input_layer_name, input_features.shape, input_data_type)
     infer_input.set_data_from_numpy(input_features)
 
     return infer_input
 
-def decode(hidden_states: np.ndarray | torch.Tensor) -> str:
+def decode(hidden_states: np.ndarray | torch.Tensor) -> list[str]:
 
     if not isinstance(hidden_states, torch.Tensor):
         hidden_states = BaseModelOutput(
@@ -93,60 +111,72 @@ def decode(hidden_states: np.ndarray | torch.Tensor) -> str:
 
 async def infer(
     triton_client: triton_grpc_aio.InferenceServerClient,
-    pcm_bytes: bytes,
+    pcm_bytes: bytes | Sequence[bytes],
     sample_rate: int,
     channels: int,
     model_name: str = "whisper"
-) -> str:
-    if not pcm_bytes:
+) -> str | list[str]:
+    is_batch_input = not isinstance(pcm_bytes, bytes)
+    if is_batch_input and not pcm_bytes:
+        return []
+    if not is_batch_input and not pcm_bytes:
         return ""
     
     infer_input = tokenize_audio(pcm_bytes=pcm_bytes, sample_rate=sample_rate, channels=channels)
-    hidden_states = await triton_client.infer(
+    infer_result = await triton_client.infer(
         model_name=model_name,
-        input=[infer_input],
+        inputs=[infer_input],
         outputs=[MODEL_OUTPUT]
     )
+    hidden_states = infer_result.as_numpy(OUTPUT_LAYER_NAME)
     output = decode(hidden_states)
     print(output)
+    if is_batch_input:
+        return output
+    return output[0] if output else ""
 
 
 # input_data = tokenize_audio(wav_data, sample_rate=sample_rate, channels=channels)
 # print(input_data)
 
 
-# async def main():
-#     try:
-#         triton_client = triton_grpc_aio.InferenceServerClient(url="localhost:8001")
-#         is_live = await triton_client.is_server_live()
-#         if not is_live:
-#             print("Triton server is not live")
-#             return
+async def main():
+    try:
+        triton_client = triton_grpc_aio.InferenceServerClient(url="localhost:8001")
+        is_live = await triton_client.is_server_live()
+        if not is_live:
+            print("Triton server is not live")
+            return
 
-#         print(f"Triton server live: {is_live}")
+        print(f"Triton server live: {is_live}")
 
-#         infer_input = triton_grpc_aio.InferInput("mel", [1, 80, 300], "FP32")
-#         infer_input.set_data_from_numpy(np.random.rand(1, 80, 300).astype(np.float32))  # Example input
+        infer_input = triton_grpc_aio.InferInput(INPUT_LAYER_NAME, [5, 128, 3000], INPUT_DATA_TYPE)
+        infer_input.set_data_from_numpy(np.random.rand(5, 128, 3000).astype(np.float32))  # Example input
 
-#         requested_output = triton_grpc_aio.InferRequestedOutput("encoder_hidden_states")
+        requested_output = triton_grpc_aio.InferRequestedOutput(OUTPUT_LAYER_NAME)
 
-#         result = await triton_client.infer(
-#             model_name="onnx_whisper",
-#             inputs=[
-#                 infer_input
-#             ],
-#             outputs=[
-#                 requested_output
-#             ]
-#         )
+        result = await triton_client.infer(
+            model_name="whisper_whole",
+            inputs=[
+                infer_input
+            ],
+            outputs=[
+                requested_output
+            ]
+        )
 
-#         print("Inference result:", result)
+        # print("Inference result:", result)
+        # output = result.get_output(OUTPUT_LAYER_NAME)
+        # print("Inference output:", output)
+        # print("Inference output:", output.data)
+        output_data = result.as_numpy(OUTPUT_LAYER_NAME)
+        print("Inference output:", output_data.shape)
 
-#     except Exception as e:
-#         print(f"Error connecting to Triton server: {e}")
+    except Exception as e:
+        print(f"Error connecting to Triton server: {e}")
 
-# if __name__ == "__main__":
-#     asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
 
 
 
