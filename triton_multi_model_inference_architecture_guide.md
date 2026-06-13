@@ -339,7 +339,7 @@ Your system must:
 ## Docker
 
 ```bash
-docker run --rm -p8000:8000 -p8001:8001 -p8002:8002 -v $(pwd)/models:/models nvcr.io/nvidia/tritonserver:24.01-py3 tritonserver --model-repository=/models
+docker run --gpus=1 --rm -p8000:8000 -p8001:8001 -p8002:8002 -v $(pwd)/models:/models nvcr.io/nvidia/tritonserver:24.01-py3 tritonserver --model-repository=/models
 ```
 
 This would run a docker container with the three ports `8000-8082` open which are
@@ -450,3 +450,17 @@ triton inference server container verion = 26.04
 | Container Version | Triton Inference Server | Ubuntu | CUDA Toolkit       | TensorRT             |
 | ----------------- | ----------------------- | ------ | ------------------ | -------------------- |
 | 26.04             | 2.68.0                  | 24.04  | NVIDIA CUDA 13.2.1 | TensorRT™ 10.16.1.11 |
+
+# Deploy transformers
+
+## installation
+
+```
+pip install faster-whisper ctranslate2 transformers
+```
+
+## compile model
+
+```
+ct2-transformers-converter --model raw_models\whisper-large-v3-turbo --output_dir triton_models\whister_ct2 --quantization float16 --copy_files raw_models\whisper-large-v3-turbo\tokenizer.json raw_models\whisper-large-v3-turbo\preprocessor_config.json
+```
