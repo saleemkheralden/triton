@@ -1,26 +1,25 @@
-from .triton import TritonAdapter
-from preprocessing import 
-import numpy as np
-from collections import deque
+import torch
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
-class WhisperAdapter:
+model_id = "../raw_models/whisper-large-v3-turbo"
 
-	def __init__(self):
-		# self.audio_buffer = np.array([],dtype=np.float32)
-		self.audio_chunks = deque()		
-		self.triton_adapter = TritonAdapter()
+processor = WhisperProcessor.from_pretrained(model_id)
+model = WhisperForConditionalGeneration.from_pretrained(model_id)
 
+model.eval()
 
-	def insert_audio_chunk(self, audio):
-		# self.audio_buffer = np.append(self.audio_buffer, audio)
-		self.audio_chunks.append(audio)
+dummy_input = torch.randn(1, 128, 3000)
 
-	def process_iter(self):
-		audio = np.concatenate(self.audio_chunks)
-		
-		self.triton_adapter()
+torch.onnx.export(
+    model.model.encoder,
+    (dummy_input,),
+    "whisper_dynamic_encoder.onnx",
+    input_names=["input_features"],
+    output_names=["last_hidden_state"],
+    dynamic_axes={
+        "input_features": {0: "batch_size"},
+        "last_hidden_state": {0: "batch_size"},
+    }
+)
 
-
-
-
-
+print("Encoder exported")
